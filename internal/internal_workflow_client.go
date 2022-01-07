@@ -52,29 +52,29 @@ import (
 var _ Client = (*WorkflowClient)(nil)
 var _ NamespaceClient = (*namespaceClient)(nil)
 
-const (
-	defaultGetHistoryTimeout = 65 * time.Second
-)
+// const (
+// 	defaultGetHistoryTimeout = 65 * time.Second
+// )
 
-var (
-	maxListArchivedWorkflowTimeout = time.Minute * 3
-)
+// var (
+// 	maxListArchivedWorkflowTimeout = time.Minute * 3
+// )
 
 type (
 	// WorkflowClient is the client for starting a workflow execution.
-	WorkflowClient struct {
-		workflowService    workflowservice.WorkflowServiceClient
-		connectionCloser   io.Closer
-		namespace          string
-		registry           *registry
-		logger             log.Logger
-		metricsHandler     metrics.Handler
-		identity           string
-		dataConverter      converter.DataConverter
-		contextPropagators []ContextPropagator
-		workerInterceptors []WorkerInterceptor
-		interceptor        ClientOutboundInterceptor
-	}
+	// WorkflowClient struct {
+	// 	workflowService    workflowservice.WorkflowServiceClient
+	// 	connectionCloser   io.Closer
+	// 	namespace          string
+	// 	registry           *registry
+	// 	logger             log.Logger
+	// 	metricsHandler     metrics.Handler
+	// 	identity           string
+	// 	dataConverter      converter.DataConverter
+	// 	contextPropagators []ContextPropagator
+	// 	workerInterceptors []WorkerInterceptor
+	// 	interceptor        ClientOutboundInterceptor
+	// }
 
 	// namespaceClient is the client for managing namespaces.
 	namespaceClient struct {
@@ -938,38 +938,38 @@ func (workflowRun *workflowRunImpl) follow(ctx context.Context, valuePtr interfa
 	return workflowRun.Get(ctx, valuePtr)
 }
 
-func getWorkflowMemo(input map[string]interface{}, dc converter.DataConverter) (*commonpb.Memo, error) {
-	if input == nil {
-		return nil, nil
-	}
+// func getWorkflowMemo(input map[string]interface{}, dc converter.DataConverter) (*commonpb.Memo, error) {
+// 	if input == nil {
+// 		return nil, nil
+// 	}
 
-	memo := make(map[string]*commonpb.Payload)
-	for k, v := range input {
-		// TODO (shtin): use dc here???
-		memoBytes, err := converter.GetDefaultDataConverter().ToPayload(v)
-		if err != nil {
-			return nil, fmt.Errorf("encode workflow memo error: %v", err.Error())
-		}
-		memo[k] = memoBytes
-	}
-	return &commonpb.Memo{Fields: memo}, nil
-}
+// 	memo := make(map[string]*commonpb.Payload)
+// 	for k, v := range input {
+// 		// TODO (shtin): use dc here???
+// 		memoBytes, err := converter.GetDefaultDataConverter().ToPayload(v)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("encode workflow memo error: %v", err.Error())
+// 		}
+// 		memo[k] = memoBytes
+// 	}
+// 	return &commonpb.Memo{Fields: memo}, nil
+// }
 
-func serializeSearchAttributes(input map[string]interface{}) (*commonpb.SearchAttributes, error) {
-	if input == nil {
-		return nil, nil
-	}
+// func serializeSearchAttributes(input map[string]interface{}) (*commonpb.SearchAttributes, error) {
+// 	if input == nil {
+// 		return nil, nil
+// 	}
 
-	attr := make(map[string]*commonpb.Payload)
-	for k, v := range input {
-		attrBytes, err := converter.GetDefaultDataConverter().ToPayload(v)
-		if err != nil {
-			return nil, fmt.Errorf("encode search attribute [%s] error: %v", k, err)
-		}
-		attr[k] = attrBytes
-	}
-	return &commonpb.SearchAttributes{IndexedFields: attr}, nil
-}
+// 	attr := make(map[string]*commonpb.Payload)
+// 	for k, v := range input {
+// 		attrBytes, err := converter.GetDefaultDataConverter().ToPayload(v)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("encode search attribute [%s] error: %v", k, err)
+// 		}
+// 		attr[k] = attrBytes
+// 	}
+// 	return &commonpb.SearchAttributes{IndexedFields: attr}, nil
+// }
 
 type workflowClientInterceptor struct{ client *WorkflowClient }
 

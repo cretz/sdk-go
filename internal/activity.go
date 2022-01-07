@@ -187,6 +187,12 @@ func GetWorkerStopChannel(ctx context.Context) <-chan struct{} {
 	return getActivityOutboundInterceptor(ctx).GetWorkerStopChannel(ctx)
 }
 
+// IsActivityContext returns true if the context is an activity context.
+func IsActivityContext(ctx context.Context) bool {
+	a := ctx.Value(activityInterceptorContextKey)
+	return a != nil
+}
+
 // RecordActivityHeartbeat sends heartbeat for the currently executing activity
 // If the activity is either canceled (or) workflow/activity doesn't exist then we would cancel
 // the context with error context.Canceled.

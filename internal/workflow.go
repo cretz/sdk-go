@@ -179,11 +179,11 @@ type (
 		RunID string
 	}
 
-	// EncodedValue is type used to encapsulate/extract encoded result from workflow/activity.
-	EncodedValue struct {
-		value         *commonpb.Payloads
-		dataConverter converter.DataConverter
-	}
+	// // EncodedValue is type used to encapsulate/extract encoded result from workflow/activity.
+	// EncodedValue struct {
+	// 	value         *commonpb.Payloads
+	// 	dataConverter converter.DataConverter
+	// }
 	// Version represents a change version. See GetVersion call.
 	Version int
 
@@ -1238,25 +1238,25 @@ func (wc *workflowEnvironmentInterceptor) GetSignalChannel(ctx Context, signalNa
 	return getWorkflowEnvOptions(ctx).getSignalChannel(ctx, signalName)
 }
 
-func newEncodedValue(value *commonpb.Payloads, dc converter.DataConverter) converter.EncodedValue {
-	if dc == nil {
-		dc = converter.GetDefaultDataConverter()
-	}
-	return &EncodedValue{value, dc}
-}
+// func newEncodedValue(value *commonpb.Payloads, dc converter.DataConverter) converter.EncodedValue {
+// 	if dc == nil {
+// 		dc = converter.GetDefaultDataConverter()
+// 	}
+// 	return &EncodedValue{value, dc}
+// }
 
-// Get extract data from encoded data to desired value type. valuePtr is pointer to the actual value type.
-func (b EncodedValue) Get(valuePtr interface{}) error {
-	if !b.HasValue() {
-		return ErrNoData
-	}
-	return decodeArg(b.dataConverter, b.value, valuePtr)
-}
+// // Get extract data from encoded data to desired value type. valuePtr is pointer to the actual value type.
+// func (b EncodedValue) Get(valuePtr interface{}) error {
+// 	if !b.HasValue() {
+// 		return ErrNoData
+// 	}
+// 	return decodeArg(b.dataConverter, b.value, valuePtr)
+// }
 
-// HasValue return whether there is value
-func (b EncodedValue) HasValue() bool {
-	return b.value != nil
-}
+// // HasValue return whether there is value
+// func (b EncodedValue) HasValue() bool {
+// 	return b.value != nil
+// }
 
 // SideEffect executes the provided function once, records its result into the workflow history. The recorded result on
 // history will be returned without executing the provided function during replay. This guarantees the deterministic

@@ -42,11 +42,11 @@ import (
 )
 
 type (
-	// EncodedValues is a type alias used to encapsulate/extract encoded arguments from workflow/activity.
-	EncodedValues struct {
-		values        *commonpb.Payloads
-		dataConverter converter.DataConverter
-	}
+	// // EncodedValues is a type alias used to encapsulate/extract encoded arguments from workflow/activity.
+	// EncodedValues struct {
+	// 	values        *commonpb.Payloads
+	// 	dataConverter converter.DataConverter
+	// }
 
 	// ErrorDetailsValues is a type alias used hold error details objects.
 	ErrorDetailsValues []interface{}

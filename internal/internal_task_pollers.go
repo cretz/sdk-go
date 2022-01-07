@@ -28,7 +28,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -920,122 +919,122 @@ func reportActivityComplete(
 	return reportErr
 }
 
-func reportActivityCompleteByID(
-	ctx context.Context,
-	service workflowservice.WorkflowServiceClient,
-	request interface{},
-	rpcMetricsHandler metrics.Handler,
-) error {
-	if request == nil {
-		// nothing to report
-		return nil
-	}
+// func reportActivityCompleteByID(
+// 	ctx context.Context,
+// 	service workflowservice.WorkflowServiceClient,
+// 	request interface{},
+// 	rpcMetricsHandler metrics.Handler,
+// ) error {
+// 	if request == nil {
+// 		// nothing to report
+// 		return nil
+// 	}
 
-	var reportErr error
-	switch request := request.(type) {
-	case *workflowservice.RespondActivityTaskCanceledByIdRequest:
-		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
-			defaultGrpcRetryParameters(ctx))
-		defer cancel()
-		_, err := service.RespondActivityTaskCanceledById(grpcCtx, request)
-		reportErr = err
-	case *workflowservice.RespondActivityTaskFailedByIdRequest:
-		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
-			defaultGrpcRetryParameters(ctx))
-		defer cancel()
-		_, err := service.RespondActivityTaskFailedById(grpcCtx, request)
-		reportErr = err
-	case *workflowservice.RespondActivityTaskCompletedByIdRequest:
-		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
-			defaultGrpcRetryParameters(ctx))
-		defer cancel()
-		_, err := service.RespondActivityTaskCompletedById(grpcCtx, request)
-		reportErr = err
-	}
-	return reportErr
-}
+// 	var reportErr error
+// 	switch request := request.(type) {
+// 	case *workflowservice.RespondActivityTaskCanceledByIdRequest:
+// 		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
+// 			defaultGrpcRetryParameters(ctx))
+// 		defer cancel()
+// 		_, err := service.RespondActivityTaskCanceledById(grpcCtx, request)
+// 		reportErr = err
+// 	case *workflowservice.RespondActivityTaskFailedByIdRequest:
+// 		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
+// 			defaultGrpcRetryParameters(ctx))
+// 		defer cancel()
+// 		_, err := service.RespondActivityTaskFailedById(grpcCtx, request)
+// 		reportErr = err
+// 	case *workflowservice.RespondActivityTaskCompletedByIdRequest:
+// 		grpcCtx, cancel := newGRPCContext(ctx, grpcMetricsHandler(rpcMetricsHandler),
+// 			defaultGrpcRetryParameters(ctx))
+// 		defer cancel()
+// 		_, err := service.RespondActivityTaskCompletedById(grpcCtx, request)
+// 		reportErr = err
+// 	}
+// 	return reportErr
+// }
 
-func convertActivityResultToRespondRequest(identity string, taskToken []byte, result *commonpb.Payloads, err error,
-	dataConverter converter.DataConverter, namespace string) interface{} {
-	if err == ErrActivityResultPending {
-		// activity result is pending and will be completed asynchronously.
-		// nothing to report at this point
-		return ErrActivityResultPending
-	}
+// func convertActivityResultToRespondRequest(identity string, taskToken []byte, result *commonpb.Payloads, err error,
+// 	dataConverter converter.DataConverter, namespace string) interface{} {
+// 	if err == ErrActivityResultPending {
+// 		// activity result is pending and will be completed asynchronously.
+// 		// nothing to report at this point
+// 		return ErrActivityResultPending
+// 	}
 
-	if err == nil {
-		return &workflowservice.RespondActivityTaskCompletedRequest{
-			TaskToken: taskToken,
-			Result:    result,
-			Identity:  identity,
-			Namespace: namespace}
-	}
+// 	if err == nil {
+// 		return &workflowservice.RespondActivityTaskCompletedRequest{
+// 			TaskToken: taskToken,
+// 			Result:    result,
+// 			Identity:  identity,
+// 			Namespace: namespace}
+// 	}
 
-	var canceledErr *CanceledError
-	if errors.As(err, &canceledErr) {
-		return &workflowservice.RespondActivityTaskCanceledRequest{
-			TaskToken: taskToken,
-			Details:   convertErrDetailsToPayloads(canceledErr.details, dataConverter),
-			Identity:  identity,
-			Namespace: namespace}
-	}
-	if errors.Is(err, context.Canceled) {
-		return &workflowservice.RespondActivityTaskCanceledRequest{
-			TaskToken: taskToken,
-			Identity:  identity,
-			Namespace: namespace}
-	}
+// 	var canceledErr *CanceledError
+// 	if errors.As(err, &canceledErr) {
+// 		return &workflowservice.RespondActivityTaskCanceledRequest{
+// 			TaskToken: taskToken,
+// 			Details:   convertErrDetailsToPayloads(canceledErr.details, dataConverter),
+// 			Identity:  identity,
+// 			Namespace: namespace}
+// 	}
+// 	if errors.Is(err, context.Canceled) {
+// 		return &workflowservice.RespondActivityTaskCanceledRequest{
+// 			TaskToken: taskToken,
+// 			Identity:  identity,
+// 			Namespace: namespace}
+// 	}
 
-	return &workflowservice.RespondActivityTaskFailedRequest{
-		TaskToken: taskToken,
-		Failure:   ConvertErrorToFailure(err, dataConverter),
-		Identity:  identity,
-		Namespace: namespace}
-}
+// 	return &workflowservice.RespondActivityTaskFailedRequest{
+// 		TaskToken: taskToken,
+// 		Failure:   ConvertErrorToFailure(err, dataConverter),
+// 		Identity:  identity,
+// 		Namespace: namespace}
+// }
 
-func convertActivityResultToRespondRequestByID(identity, namespace, workflowID, runID, activityID string,
-	result *commonpb.Payloads, err error, dataConverter converter.DataConverter) interface{} {
-	if err == ErrActivityResultPending {
-		// activity result is pending and will be completed asynchronously.
-		// nothing to report at this point
-		return nil
-	}
+// func convertActivityResultToRespondRequestByID(identity, namespace, workflowID, runID, activityID string,
+// 	result *commonpb.Payloads, err error, dataConverter converter.DataConverter) interface{} {
+// 	if err == ErrActivityResultPending {
+// 		// activity result is pending and will be completed asynchronously.
+// 		// nothing to report at this point
+// 		return nil
+// 	}
 
-	if err == nil {
-		return &workflowservice.RespondActivityTaskCompletedByIdRequest{
-			Namespace:  namespace,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			ActivityId: activityID,
-			Result:     result,
-			Identity:   identity}
-	}
+// 	if err == nil {
+// 		return &workflowservice.RespondActivityTaskCompletedByIdRequest{
+// 			Namespace:  namespace,
+// 			WorkflowId: workflowID,
+// 			RunId:      runID,
+// 			ActivityId: activityID,
+// 			Result:     result,
+// 			Identity:   identity}
+// 	}
 
-	var canceledErr *CanceledError
-	if errors.As(err, &canceledErr) {
-		return &workflowservice.RespondActivityTaskCanceledByIdRequest{
-			Namespace:  namespace,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			ActivityId: activityID,
-			Details:    convertErrDetailsToPayloads(canceledErr.details, dataConverter),
-			Identity:   identity}
-	}
+// 	var canceledErr *CanceledError
+// 	if errors.As(err, &canceledErr) {
+// 		return &workflowservice.RespondActivityTaskCanceledByIdRequest{
+// 			Namespace:  namespace,
+// 			WorkflowId: workflowID,
+// 			RunId:      runID,
+// 			ActivityId: activityID,
+// 			Details:    convertErrDetailsToPayloads(canceledErr.details, dataConverter),
+// 			Identity:   identity}
+// 	}
 
-	if errors.Is(err, context.Canceled) {
-		return &workflowservice.RespondActivityTaskCanceledByIdRequest{
-			Namespace:  namespace,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			ActivityId: activityID,
-			Identity:   identity}
-	}
+// 	if errors.Is(err, context.Canceled) {
+// 		return &workflowservice.RespondActivityTaskCanceledByIdRequest{
+// 			Namespace:  namespace,
+// 			WorkflowId: workflowID,
+// 			RunId:      runID,
+// 			ActivityId: activityID,
+// 			Identity:   identity}
+// 	}
 
-	return &workflowservice.RespondActivityTaskFailedByIdRequest{
-		Namespace:  namespace,
-		WorkflowId: workflowID,
-		RunId:      runID,
-		ActivityId: activityID,
-		Failure:    ConvertErrorToFailure(err, dataConverter),
-		Identity:   identity}
-}
+// 	return &workflowservice.RespondActivityTaskFailedByIdRequest{
+// 		Namespace:  namespace,
+// 		WorkflowId: workflowID,
+// 		RunId:      runID,
+// 		ActivityId: activityID,
+// 		Failure:    ConvertErrorToFailure(err, dataConverter),
+// 		Identity:   identity}
+// }

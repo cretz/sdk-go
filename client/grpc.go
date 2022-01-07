@@ -22,38 +22,90 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package internal
+package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gogo/status"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/internal/common/metrics"
+	internal_backoff "go.temporal.io/sdk/internal/common/backoff"
 	"go.temporal.io/sdk/internal/common/retry"
+	"go.temporal.io/sdk/temporal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 )
 
-type (
-	// dialParameters are passed to GRPCDialer and must be used to create gRPC connection.
-	dialParameters struct {
-		HostPort              string
-		UserConnectionOptions ConnectionOptions
-		RequiredInterceptors  []grpc.UnaryClientInterceptor
-		DefaultServiceConfig  string
+type GRPCContextOptions struct {
+	Timeout            time.Duration
+	MetricsHandler     MetricsHandler
+	Headers            metadata.MD
+	LongPoll           bool
+	DefaultRetryPolicy bool
+}
+
+func NewGRPCContext(ctx context.Context, options GRPCContextOptions) (context.Context, context.CancelFunc) {
+	if options.Timeout == 0 {
+		options.Timeout = defaultRPCTimeout
+		// Set rpc timeout less than context timeout to allow for retries when call gets lost
+		now := time.Now()
+		if deadline, ok := ctx.Deadline(); ok && deadline.After(now) {
+			options.Timeout = deadline.Sub(now) / 2
+			// Make sure to not set rpc timeout lower than minRPCTimeout
+			if options.Timeout < minRPCTimeout {
+				options.Timeout = minRPCTimeout
+			} else if options.Timeout > maxRPCTimeout {
+				options.Timeout = maxRPCTimeout
+			}
+		}
 	}
-)
+
+	if options.Headers == nil {
+		options.Headers = metadata.MD{}
+	}
+	options.Headers.Set(clientNameHeaderName, clientNameHeaderValue)
+	options.Headers.Set(clientVersionHeaderName, temporal.SDKVersion)
+	options.Headers.Set(supportedServerVersionsHeaderName, supportedServerVersions)
+	ctx = metadata.NewOutgoingContext(ctx, options.Headers)
+
+	if options.MetricsHandler != nil {
+		ctx = context.WithValue(ctx, metricsHandlerContextKey{}, options.MetricsHandler)
+	}
+
+	ctx = context.WithValue(ctx, metricsLongPollContextKey{}, options.LongPoll)
+
+	if options.DefaultRetryPolicy {
+		ctx = context.WithValue(ctx, retry.ConfigKey, createDynamicServiceRetryPolicy(ctx).GrpcRetryConfig())
+	}
+
+	return context.WithTimeout(ctx, options.Timeout)
+}
+
+// dialParameters are passed to GRPCDialer and must be used to create gRPC connection.
+type dialParameters struct {
+	HostPort              string
+	UserConnectionOptions ConnectionOptions
+	RequiredInterceptors  []grpc.UnaryClientInterceptor
+	DefaultServiceConfig  string
+}
+
+func newDialParameters(options *Options) dialParameters {
+	return dialParameters{
+		UserConnectionOptions: options.ConnectionOptions,
+		HostPort:              options.HostPort,
+		RequiredInterceptors:  requiredInterceptors(options.MetricsHandler, options.HeadersProvider, options.TrafficController),
+		DefaultServiceConfig:  defaultServiceConfig,
+	}
+}
 
 const (
-	// LocalHostPort is a default host:port for worker and client to connect to.
-	// LocalHostPort = "localhost:7233"
-
 	// defaultServiceConfig is a default gRPC connection service config which enables DNS round-robin between IPs.
 	defaultServiceConfig = `{"loadBalancingConfig": [{"round_robin":{}}]}`
 
@@ -66,6 +118,26 @@ const (
 	mb = 1024 * 1024
 	// defaultMaxPayloadSize is a maximum size of the payload that grpc client would allow.
 	defaultMaxPayloadSize = 64 * mb
+
+	retryPollOperationInitialInterval = 200 * time.Millisecond
+	retryPollOperationMaxInterval     = 10 * time.Second
+
+	clientNameHeaderName              = "client-name"
+	clientNameHeaderValue             = "temporal-go"
+	clientVersionHeaderName           = "client-version"
+	supportedServerVersionsHeaderName = "supported-server-versions"
+
+	// defaultRPCTimeout is the default gRPC call timeout.
+	defaultRPCTimeout = 10 * time.Second
+	// minRPCTimeout is minimum gRPC call timeout allowed.
+	minRPCTimeout = 1 * time.Second
+	// maxRPCTimeout is maximum gRPC call timeout allowed (should not be less than defaultRPCTimeout).
+	maxRPCTimeout = 10 * time.Second
+
+	// supportedServerVersions is a semver rages (https://github.com/blang/semver#ranges) of server versions that
+	// are supported by this Temporal SDK.
+	// Server validates if its version fits into SupportedServerVersions range and rejects request if it doesn't.
+	supportedServerVersions = ">=1.0.0 <2.0.0"
 )
 
 func dial(params dialParameters) (*grpc.ClientConn, error) {
@@ -127,21 +199,21 @@ func dial(params dialParameters) (*grpc.ClientConn, error) {
 }
 
 func requiredInterceptors(
-	metricsHandler metrics.Handler,
+	metricsHandler MetricsHandler,
 	headersProvider HeadersProvider,
 	controller TrafficController,
 ) []grpc.UnaryClientInterceptor {
 	interceptors := []grpc.UnaryClientInterceptor{
 		errorInterceptor,
 		// Report aggregated metrics for the call, this is done outside of the retry loop.
-		metrics.NewGRPCInterceptor(metricsHandler, ""),
+		newMetricsGRPCInterceptor(metricsHandler, ""),
 		// By default the grpc retry interceptor *is disabled*, preventing accidental use of retries.
 		// We add call options for retry configuration based on the values present in the context.
 		retry.NewRetryOptionsInterceptor(),
 		// Performs retries *IF* retry options are set for the call.
 		grpc_retry.UnaryClientInterceptor(),
 		// Report metrics for every call made to the server.
-		metrics.NewGRPCInterceptor(metricsHandler, attemptSuffix),
+		newMetricsGRPCInterceptor(metricsHandler, attemptSuffix),
 	}
 	if headersProvider != nil {
 		interceptors = append(interceptors, headersProviderInterceptor(headersProvider))
@@ -180,4 +252,80 @@ func errorInterceptor(ctx context.Context, method string, req, reply interface{}
 	err := invoker(ctx, method, req, reply, cc, opts...)
 	err = serviceerror.FromStatus(status.Convert(err))
 	return err
+}
+
+const (
+	retryServiceOperationInitialInterval    = 200 * time.Millisecond
+	retryServiceOperationExpirationInterval = 60 * time.Second
+	retryServiceOperationBackoff            = 2
+)
+
+// Creates a retry policy which allows appropriate retries for the deadline passed in as context.
+// It uses the context deadline to set MaxInterval as 1/10th of context timeout
+// MaxInterval = Max(context_timeout/10, 20ms)
+// defaults to ExpirationInterval of 60 seconds, or uses context deadline as expiration interval
+func createDynamicServiceRetryPolicy(ctx context.Context) internal_backoff.RetryPolicy {
+	timeout := retryServiceOperationExpirationInterval
+	if ctx != nil {
+		now := time.Now()
+		if expiration, ok := ctx.Deadline(); ok && expiration.After(now) {
+			timeout = expiration.Sub(now)
+		}
+	}
+	initialInterval := retryServiceOperationInitialInterval
+	maximumInterval := timeout / 10
+	if maximumInterval < retryServiceOperationInitialInterval {
+		maximumInterval = retryServiceOperationInitialInterval
+	}
+
+	policy := internal_backoff.NewExponentialRetryPolicy(initialInterval)
+	policy.SetBackoffCoefficient(retryServiceOperationBackoff)
+	policy.SetMaximumInterval(maximumInterval)
+	policy.SetExpirationInterval(timeout)
+	return policy
+}
+
+const (
+	healthCheckServiceName           = "temporal.api.workflowservice.v1.WorkflowService"
+	defaultHealthCheckAttemptTimeout = 5 * time.Second
+	defaultHealthCheckTimeout        = 10 * time.Second
+)
+
+// checkHealth checks service health using gRPC health check:
+// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+func checkHealth(connection grpc.ClientConnInterface, options ConnectionOptions) error {
+	if options.DisableHealthCheck {
+		return nil
+	}
+
+	healthClient := healthpb.NewHealthClient(connection)
+
+	request := &healthpb.HealthCheckRequest{
+		Service: healthCheckServiceName,
+	}
+
+	attemptTimeout := options.HealthCheckAttemptTimeout
+	if attemptTimeout == 0 {
+		attemptTimeout = defaultHealthCheckAttemptTimeout
+	}
+	timeout := options.HealthCheckTimeout
+	if timeout == 0 {
+		timeout = defaultHealthCheckTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	policy := createDynamicServiceRetryPolicy(ctx)
+	// TODO: refactor using grpc retry interceptor
+	return internal_backoff.Retry(ctx, func() error {
+		healthCheckCtx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
+		defer cancel()
+		resp, err := healthClient.Check(healthCheckCtx, request)
+		if err != nil {
+			return fmt.Errorf("health check error: %w", err)
+		}
+		if resp.Status != healthpb.HealthCheckResponse_SERVING {
+			return fmt.Errorf("health check returned unhealthy status: %v", resp.Status)
+		}
+		return nil
+	}, policy, nil)
 }

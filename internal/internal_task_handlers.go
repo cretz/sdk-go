@@ -1918,33 +1918,33 @@ func recordActivityHeartbeat(ctx context.Context, service workflowservice.Workfl
 	return err
 }
 
-func recordActivityHeartbeatByID(ctx context.Context, service workflowservice.WorkflowServiceClient, metricsHandler metrics.Handler,
-	identity, namespace, workflowID, runID, activityID string, details *commonpb.Payloads) error {
-	request := &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
-		Namespace:  namespace,
-		WorkflowId: workflowID,
-		RunId:      runID,
-		ActivityId: activityID,
-		Details:    details,
-		Identity:   identity}
+// func recordActivityHeartbeatByID(ctx context.Context, service workflowservice.WorkflowServiceClient, metricsHandler metrics.Handler,
+// 	identity, namespace, workflowID, runID, activityID string, details *commonpb.Payloads) error {
+// 	request := &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+// 		Namespace:  namespace,
+// 		WorkflowId: workflowID,
+// 		RunId:      runID,
+// 		ActivityId: activityID,
+// 		Details:    details,
+// 		Identity:   identity}
 
-	var heartbeatResponse *workflowservice.RecordActivityTaskHeartbeatByIdResponse
-	grpcCtx, cancel := newGRPCContext(ctx,
-		grpcMetricsHandler(metricsHandler),
-		defaultGrpcRetryParameters(ctx))
-	defer cancel()
+// 	var heartbeatResponse *workflowservice.RecordActivityTaskHeartbeatByIdResponse
+// 	grpcCtx, cancel := newGRPCContext(ctx,
+// 		grpcMetricsHandler(metricsHandler),
+// 		defaultGrpcRetryParameters(ctx))
+// 	defer cancel()
 
-	heartbeatResponse, err := service.RecordActivityTaskHeartbeatById(grpcCtx, request)
-	if err == nil && heartbeatResponse != nil && heartbeatResponse.GetCancelRequested() {
-		return NewCanceledError()
-	}
-	return err
-}
+// 	heartbeatResponse, err := service.RecordActivityTaskHeartbeatById(grpcCtx, request)
+// 	if err == nil && heartbeatResponse != nil && heartbeatResponse.GetCancelRequested() {
+// 		return NewCanceledError()
+// 	}
+// 	return err
+// }
 
-// This enables verbose logging in the client library.
-// check worker.EnableVerboseLogging()
-func traceLog(fn func()) {
-	if enableVerboseLogging {
-		fn()
-	}
-}
+// // This enables verbose logging in the client library.
+// // check worker.EnableVerboseLogging()
+// func traceLog(fn func()) {
+// 	if enableVerboseLogging {
+// 		fn()
+// 	}
+// }
