@@ -260,7 +260,7 @@ func WithActivityTask(
 	scheduleToCloseTimeout := common.DurationValue(task.GetScheduleToCloseTimeout())
 	startToCloseTimeout := common.DurationValue(task.GetStartToCloseTimeout())
 	heartbeatTimeout := common.DurationValue(task.GetHeartbeatTimeout())
-	deadline := calculateActivityDeadline(scheduled, started, scheduleToCloseTimeout, startToCloseTimeout)
+	deadline := CalculateActivityDeadline(scheduled, started, scheduleToCloseTimeout, startToCloseTimeout)
 
 	logger = log.With(logger,
 		tagActivityID, task.ActivityId,
@@ -331,7 +331,7 @@ func WithLocalActivityTask(
 	if scheduleToCloseTimeout == 0 {
 		scheduleToCloseTimeout = startToCloseTimeout
 	}
-	deadline := calculateActivityDeadline(task.scheduledTime, startedTime, scheduleToCloseTimeout, startToCloseTimeout)
+	deadline := CalculateActivityDeadline(task.scheduledTime, startedTime, scheduleToCloseTimeout, startToCloseTimeout)
 	if task.attempt > 1 && !task.expireTime.IsZero() && task.expireTime.Before(deadline) {
 		// this is attempt and expire time is before SCHEDULE_TO_CLOSE timeout
 		deadline = task.expireTime
@@ -382,7 +382,7 @@ func newActivityContext(
 	return ctx, nil
 }
 
-func calculateActivityDeadline(scheduled, started time.Time, scheduleToCloseTimeout, startToCloseTimeout time.Duration) time.Time {
+func CalculateActivityDeadline(scheduled, started time.Time, scheduleToCloseTimeout, startToCloseTimeout time.Duration) time.Time {
 	startToCloseDeadline := started.Add(startToCloseTimeout)
 	if scheduleToCloseTimeout > 0 {
 		scheduleToCloseDeadline := scheduled.Add(scheduleToCloseTimeout)

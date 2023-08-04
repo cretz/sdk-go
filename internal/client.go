@@ -460,6 +460,8 @@ type (
 		// worker options, the ones here wrap the ones in worker options. The same
 		// interceptor should not be set here and in worker options.
 		Interceptors []ClientInterceptor
+
+		overrideWorkflowService workflowservice.WorkflowServiceClient
 	}
 
 	// HeadersProvider returns a map of gRPC headers that should be used on every request.
@@ -669,6 +671,10 @@ type (
 	}
 )
 
+func OverrideWorkflowService(c *ClientOptions, workflowService workflowservice.WorkflowServiceClient) {
+	c.overrideWorkflowService = workflowService
+}
+
 // DialClient creates a client and attempts to connect to the server.
 func DialClient(options ClientOptions) (Client, error) {
 	options.ConnectionOptions.disableEagerConnection = false
@@ -719,19 +725,23 @@ func newClient(options ClientOptions, existing *WorkflowClient) (Client, error) 
 	}
 
 	// Dial or use existing connection
+	serviceClient := options.overrideWorkflowService
 	var connection *grpc.ClientConn
 	var err error
-	if existing == nil {
-		options.ConnectionOptions.excludeInternalFromRetry = uberatomic.NewBool(false)
-		connection, err = dial(newDialParameters(&options, options.ConnectionOptions.excludeInternalFromRetry))
-		if err != nil {
-			return nil, err
+	if serviceClient == nil {
+		if existing == nil {
+			options.ConnectionOptions.excludeInternalFromRetry = uberatomic.NewBool(false)
+			connection, err = dial(newDialParameters(&options, options.ConnectionOptions.excludeInternalFromRetry))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			connection = existing.conn
 		}
-	} else {
-		connection = existing.conn
+		serviceClient = workflowservice.NewWorkflowServiceClient(connection)
 	}
 
-	client := NewServiceClient(workflowservice.NewWorkflowServiceClient(connection), connection, options)
+	client := NewServiceClient(serviceClient, connection, options)
 
 	// If using existing connection, always load its capabilities and use them for
 	// the new connection. Otherwise, only load server capabilities eagerly if not
