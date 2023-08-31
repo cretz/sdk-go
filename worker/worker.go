@@ -216,6 +216,16 @@ type (
 
 	// ReplayWorkflowHistoryOptions are options for replaying a workflow.
 	ReplayWorkflowHistoryOptions = internal.ReplayWorkflowHistoryOptions
+
+	OnDemandWorkflowWorkerOptions = internal.OnDemandWorkflowWorkerOptions
+
+	OnDemandWorkflowWorker = internal.OnDemandWorkflowWorker
+
+	OnDemandWorkflowWorkerExecuteOptions = internal.OnDemandWorkflowWorkerExecuteOptions
+
+	RegisteredWorkflow = internal.RegisteredWorkflow
+
+	RegisteredActivity = internal.RegisteredActivity
 )
 
 const (
@@ -294,4 +304,8 @@ func SetBinaryChecksum(checksum string) {
 // InterruptCh returns channel which will get data when system receives interrupt signal from OS. Pass it to worker.Run() func to stop worker with Ctrl+C.
 func InterruptCh() <-chan interface{} {
 	return internal.InterruptCh()
+}
+
+func NewOnDemandWorkflowWorker(options OnDemandWorkflowWorkerOptions) (*OnDemandWorkflowWorker, error) {
+	return internal.NewOnDemandWorkflowWorker(options)
 }

@@ -159,6 +159,8 @@ type (
 		stopTimeout       time.Duration
 		fatalErrCb        func(error)
 		userContextCancel context.CancelFunc
+		singleRunMode     bool
+		singleRunStop     func()
 	}
 
 	// baseWorker that wraps worker activities.
@@ -317,7 +319,11 @@ func (bw *baseWorker) runPoller() {
 			if bw.sessionTokenBucket != nil {
 				bw.sessionTokenBucket.waitForAvailableToken()
 			}
-			bw.pollTask()
+			ok := bw.pollTask()
+			// If the poll returned false, we need to stop the poller
+			if !ok {
+				return
+			}
 		}
 	}
 }
@@ -401,7 +407,7 @@ func (bw *baseWorker) runEagerTaskDispatcher() {
 	}
 }
 
-func (bw *baseWorker) pollTask() {
+func (bw *baseWorker) pollTask() bool {
 	var err error
 	var task interface{}
 	bw.retrier.Throttle(bw.stopCh)
@@ -411,12 +417,12 @@ func (bw *baseWorker) pollTask() {
 		if err != nil {
 			// We retry "non retriable" errors while long polling for a while, because some proxies return
 			// unexpected values causing unnecessary downtime.
-			if isNonRetriableError(err) && bw.retrier.GetElapsedTime() > getRetryLongPollGracePeriod() {
+			if (isNonRetriableError(err) && bw.retrier.GetElapsedTime() > getRetryLongPollGracePeriod()) || bw.options.singleRunMode {
 				bw.logger.Error("Worker received non-retriable error. Shutting down.", tagError, err)
 				if bw.fatalErrCb != nil {
 					bw.fatalErrCb(err)
 				}
-				return
+				return false
 			}
 			// We use the secondary retrier on resource exhausted
 			_, resourceExhausted := err.(*serviceerror.ResourceExhausted)
@@ -432,8 +438,15 @@ func (bw *baseWorker) pollTask() {
 		case <-bw.stopCh:
 		}
 	} else {
+		// In single run mode, this is a stopping condition without a new poll
+		// request
+		if bw.options.singleRunStop != nil {
+			bw.options.singleRunStop()
+			return false
+		}
 		bw.pollerRequestCh <- struct{}{} // poll failed, trigger a new poll
 	}
+	return true
 }
 
 func (bw *baseWorker) logPollTaskError(err error) {
@@ -508,6 +521,10 @@ func (bw *baseWorker) processTask(task interface{}) {
 			bw.logger.Info("Task processing failed with client side error", tagError, err)
 		} else {
 			bw.logger.Info("Task processing failed with error", tagError, err)
+		}
+		// In single run mode, this is a stopping condition
+		if bw.options.singleRunStop != nil {
+			bw.options.singleRunStop()
 		}
 	}
 }

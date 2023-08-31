@@ -221,6 +221,9 @@ type (
 		eagerActivityExecutor *eagerActivityExecutor
 
 		capabilities *workflowservice.GetSystemInfoResponse_Capabilities
+
+		singleRunMode bool
+		singleRunStop func()
 	}
 )
 
@@ -313,6 +316,8 @@ func newWorkflowTaskWorkerInternal(
 		workerType:        "WorkflowWorker",
 		stopTimeout:       params.WorkerStopTimeout,
 		fatalErrCb:        params.WorkerFatalErrorCallback,
+		singleRunMode:     params.singleRunMode,
+		singleRunStop:     params.singleRunStop,
 	},
 		params.Logger,
 		params.MetricsHandler,
@@ -360,9 +365,11 @@ func newWorkflowTaskWorkerInternal(
 
 // Start the worker.
 func (ww *workflowWorker) Start() error {
-	err := verifyNamespaceExist(ww.workflowService, ww.executionParameters.MetricsHandler, ww.executionParameters.Namespace, ww.worker.logger)
-	if err != nil {
-		return err
+	if !ww.executionParameters.singleRunMode {
+		err := verifyNamespaceExist(ww.workflowService, ww.executionParameters.MetricsHandler, ww.executionParameters.Namespace, ww.worker.logger)
+		if err != nil {
+			return err
+		}
 	}
 	ww.localActivityWorker.Start()
 	ww.worker.Start()
@@ -1462,7 +1469,7 @@ func NewAggregatedWorker(client *WorkflowClient, taskQueue string, options Worke
 	// If max-concurrent workflow pollers is 1, the worker will only do
 	// sticky-queue requests and never regular-queue requests. We disallow the
 	// value of 1 here.
-	if options.MaxConcurrentWorkflowTaskPollers == 1 {
+	if options.MaxConcurrentWorkflowTaskPollers == 1 && !options.singleRunMode {
 		panic("cannot set MaxConcurrentWorkflowTaskPollers to 1")
 	}
 
@@ -1539,7 +1546,9 @@ func NewAggregatedWorker(client *WorkflowClient, taskQueue string, options Worke
 			taskQueue:     taskQueue,
 			maxConcurrent: options.MaxConcurrentEagerActivityExecutionSize,
 		}),
-		capabilities: &capabilities,
+		capabilities:  &capabilities,
+		singleRunMode: options.singleRunMode,
+		singleRunStop: options.singleRunStop,
 	}
 
 	if options.Identity != "" {

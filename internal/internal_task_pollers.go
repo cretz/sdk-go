@@ -111,6 +111,8 @@ type (
 
 		numNormalPollerMetric *numPollerMetric
 		numStickyPollerMetric *numPollerMetric
+
+		singleRunMode bool
 	}
 
 	// activityTaskPoller implements polling/processing a workflow task
@@ -270,6 +272,11 @@ func newWorkflowTaskPoller(
 	service workflowservice.WorkflowServiceClient,
 	params workerExecutionParameters,
 ) *workflowTaskPoller {
+	stickyCacheSize := params.cache.MaxWorkflowCacheSize()
+	// In single run mode, we set a 0 size cache
+	if params.singleRunMode {
+		stickyCacheSize = 0
+	}
 	return &workflowTaskPoller{
 		basePoller: basePoller{
 			metricsHandler:       params.MetricsHandler,
@@ -289,10 +296,11 @@ func newWorkflowTaskPoller(
 		failureConverter:             params.FailureConverter,
 		stickyUUID:                   uuid.New(),
 		StickyScheduleToStartTimeout: params.StickyScheduleToStartTimeout,
-		stickyCacheSize:              params.cache.MaxWorkflowCacheSize(),
+		stickyCacheSize:              stickyCacheSize,
 		eagerActivityExecutor:        params.eagerActivityExecutor,
 		numNormalPollerMetric:        newNumPollerMetric(params.MetricsHandler, metrics.PollerTypeWorkflowTask),
 		numStickyPollerMetric:        newNumPollerMetric(params.MetricsHandler, metrics.PollerTypeWorkflowStickyTask),
+		singleRunMode:                params.singleRunMode,
 	}
 }
 
@@ -765,6 +773,10 @@ func (wtp *workflowTaskPoller) poll(ctx context.Context) (interface{}, error) {
 	}
 
 	if response == nil || len(response.TaskToken) == 0 {
+		// In single-run mode, this is a nil task to stop the poller
+		if wtp.singleRunMode {
+			return nil, nil
+		}
 		// Emit using base scope as no workflow type information is available in the case of empty poll
 		wtp.metricsHandler.Counter(metrics.WorkflowTaskQueuePollEmptyCounter).Inc(1)
 		wtp.updateBacklog(request.TaskQueue.GetKind(), 0)

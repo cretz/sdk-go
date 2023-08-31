@@ -239,6 +239,9 @@ type (
 		// is true.
 		// NOTE: Experimental
 		UseBuildIDForVersioning bool
+
+		singleRunMode bool
+		singleRunStop func()
 	}
 )
 
